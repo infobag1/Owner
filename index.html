@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShipFlow MVP - Mobile</title>
+<style>
+  body { font-family: Arial, sans-serif; background:#f0f0f0; margin:0; padding:0; }
+  header { background:#007bff; color:white; padding:1em; text-align:center; font-weight:bold; }
+  .container { padding: 1em; max-width: 600px; margin:auto; }
+  .card { background:white; padding:0.5em; margin-bottom:1em; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); word-wrap: break-word; font-weight:bold; display:flex; align-items:center; justify-content:space-between; }
+  .card-details { flex:1; }
+  .card img { width:40px; height:40px; border-radius:4px; cursor:pointer; transition: transform 0.2s; margin-left:0.5em; }
+  .card img:hover { transform: scale(2); }
+  button { padding:0.5em 0.8em; margin-left:0.3em; cursor:pointer; background:#007bff; color:white; border:none; border-radius:4px; font-size:0.9em; font-weight:bold; }
+  button:hover { background:#0056b3; }
+  .filter { margin-bottom:1em; }
+  a { color:#007bff; text-decoration:none; font-weight:bold; margin-right:0.5em; }
+
+  /* Modal styles */
+  .modal { display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color: rgba(0,0,0,0.5); }
+  .modal-content { background:#fff; margin:10% auto; padding:1em; border-radius:8px; max-width:400px; position:relative; font-weight:bold; }
+  .close { position:absolute; right:10px; top:10px; font-size:1.2em; cursor:pointer; }
+  input, select, textarea { width:100%; padding:0.7em; margin-bottom:0.5em; font-size:1em; font-weight:bold; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ShipFlow – Mobile MVP</h1>
+</header>
+<div class="container">
+
+<button id="openModalBtn">إضافة طلب جديد</button>
+
+<div class="filter">
+  <label>فلترة حسب الحالة:</label>
+  <select id="statusFilter">
+    <option value="all">الكل</option>
+    <option value="تم التسليم">تم التسليم</option>
+    <option value="قيد التوصيل">قيد التوصيل</option>
+    <option value="مغلق">مغلق</option>
+    <option value="لا يرد">لا يرد</option>
+    <option value="موجل">موجل</option>
+    <option value="رفض رفض">رفض رفض</option>
+    <option value="رفض دفع شحن">رفض دفع شحن</option>
+  </select>
+  <button id="clearOrders">مسح كل الأوردرات</button>
+</div>
+<div id="ordersContainer"></div>
+
+<!-- Modal -->
+<div id="orderModal" class="modal">
+  <div class="modal-content">
+    <span class="close" id="closeModal">&times;</span>
+    <h2>إضافة أوردر جديد</h2>
+    <form id="addOrderForm">
+      <input type="text" id="clientName" placeholder="اسم العميل" required />
+      <input type="text" id="clientPhone" placeholder="رقم العميل" required />
+      <input type="text" id="clientAddress" placeholder="العنوان" required />
+      <input type="number" id="orderPrice" placeholder="السعر" required />
+      <input type="file" id="orderImage" accept="image/*" capture="environment" />
+      <button type="submit">أضف أوردر</button>
+    </form>
+  </div>
+</div>
+
+<script>
+let orders = JSON.parse(localStorage.getItem('shipflowOrders')) || [];
+const ordersContainer = document.getElementById('ordersContainer');
+const addOrderForm = document.getElementById('addOrderForm');
+const statusFilter = document.getElementById('statusFilter');
+const clearOrdersBtn = document.getElementById('clearOrders');
+const openModalBtn = document.getElementById('openModalBtn');
+const orderModal = document.getElementById('orderModal');
+const closeModal = document.getElementById('closeModal');
+
+function saveOrders() {
+  localStorage.setItem('shipflowOrders', JSON.stringify(orders));
+}
+
+function renderOrders(filter='all') {
+  ordersContainer.innerHTML = '';
+  let filtered = orders;
+  if(filter !== 'all') filtered = orders.filter(o => o.status === filter);
+  filtered.forEach((order, index) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const details = document.createElement('div');
+    details.className = 'card-details';
+    details.innerHTML = `
+      <strong>${order.clientName}</strong><br>
+      <a href="tel:${order.clientPhone}">${order.clientPhone}</a>
+      <button onclick="window.location='https://wa.me/${order.clientPhone}'">واتساب</button><br>
+      العنوان: ${order.clientAddress}<br>
+      السعر: ${order.price}<br>
+      الحالة: 
+      <select onchange="updateStatus(${index}, this.value)">
+        <option value="تم التسليم" ${order.status==='تم التسليم'?'selected':''}>تم التسليم</option>
+        <option value="قيد التوصيل" ${order.status==='قيد التوصيل'?'selected':''}>قيد التوصيل</option>
+        <option value="مغلق" ${order.status==='مغلق'?'selected':''}>مغلق</option>
+        <option value="لا يرد" ${order.status==='لا يرد'?'selected':''}>لا يرد</option>
+        <option value="موجل" ${order.status==='موجل'?'selected':''}>موجل</option>
+        <option value="رفض رفض" ${order.status==='رفض رفض'?'selected':''}>رفض رفض</option>
+        <option value="رفض دفع شحن" ${order.status==='رفض دفع شحن'?'selected':''}>رفض دفع شحن</option>
+      </select>
+      <textarea placeholder="أضف تعليق..." onchange="updateComment(${index}, this.value)">${order.comment || ''}</textarea>
+    `;
+
+    const img = document.createElement('img');
+    if(order.image){
+      img.src = order.image;
+      img.alt = 'BOL Image';
+      img.onclick = () => window.open(order.image, '_blank');
+    }
+
+    card.appendChild(details);
+    card.appendChild(img);
+    ordersContainer.appendChild(card);
+  });
+}
+
+function updateStatus(index, status) {
+  orders[index].status = status;
+  saveOrders();
+  renderOrders(statusFilter.value);
+}
+
+function updateComment(index, comment) {
+  orders[index].comment = comment;
+  saveOrders();
+}
+
+addOrderForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const fileInput = document.getElementById('orderImage');
+  if(fileInput.files && fileInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      addOrder(event.target.result);
+    }
+    reader.readAsDataURL(fileInput.files[0]);
+  } else {
+    addOrder('');
+  }
+});
+
+function addOrder(imageData) {
+  const newOrder = {
+    clientName: document.getElementById('clientName').value,
+    clientPhone: document.getElementById('clientPhone').value,
+    clientAddress: document.getElementById('clientAddress').value,
+    price: document.getElementById('orderPrice').value,
+    image: imageData,
+    status: 'تم التسليم',
+    comment: ''
+  };
+  orders.push(newOrder);
+  saveOrders();
+  renderOrders(statusFilter.value);
+  addOrderForm.reset();
+  orderModal.style.display = 'none';
+}
+
+statusFilter.addEventListener('change', () => renderOrders(statusFilter.value));
+clearOrdersBtn.addEventListener('click', () => {
+  if(confirm('هل تريد مسح كل الأوردرات؟')) {
+    orders = [];
+    saveOrders();
+    renderOrders();
+  }
+});
+
+openModalBtn.addEventListener('click', () => { orderModal.style.display = 'block'; });
+closeModal.addEventListener('click', () => { orderModal.style.display = 'none'; });
+window.addEventListener('click', e => { if(e.target == orderModal) orderModal.style.display = 'none'; });
+
+renderOrders();
+</script>
+</body>
+</html>
